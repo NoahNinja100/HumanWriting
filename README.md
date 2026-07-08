@@ -8,7 +8,7 @@ Current Features:
 - replicate typos and correction of the typo
 - Random pauses to replicate thought varying in length
 - Press ESC to stop the writing
-- Press
+- Press P to pause typing
 
 
 To Add:
