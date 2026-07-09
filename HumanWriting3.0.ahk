@@ -1,5 +1,6 @@
 #Requires AutoHotkey v2.0
 
+DllCall("LoadLibrary", "Str", "Msftedit.dll", "Ptr")
 StopTyping := false
 Paused := false
 ProgressGui := ""
@@ -11,116 +12,128 @@ EstimatedTime := 0
 TimeRemaining := 0
 StartTime := 0
 CallingSound := "johnpork.wav"
+EvilMode := false
+UseDoubleSpace := true
+UseCommonLetterSpeed := true
+UseWarmup := false
 
-; --- Create the Menu Bar ---
-MyMenu := MenuBar()
+; ==============================
+; CLEAN BORDERLESS GUI
+; ==============================
 
-MainMenu := Menu()
-MainMenu.Add("Main", ShowMainTab)
+MyGui := Gui("-Caption +Border +MinimizeBox")
+MyGui.BackColor := "1E1E1E"
+MyGui.SetFont("s10 cFFFFFF", "Segoe UI")
 
-KeybindMenu := Menu()
-KeybindMenu.Add("View Keybinds", ShowKeybindTab)
+; --- Custom Title Bar ---
+TitleBar := MyGui.Add("Text", "x0 y0 w580 h42 Background1E1E1E cFFFFFF", "  Human Writing Replicator")
+TitleBar.SetFont("s14 Bold cFFFFFF", "Segoe UI")
+TitleBar.OnEvent("Click", DragWindow)
 
-SettingsMenu := Menu()
-SettingsMenu.Add("Settings", ShowSettingsTab)
+MinBtn := MyGui.Add("Button", "x595 y7 w35 h28", "—")
+CloseBtn := MyGui.Add("Button", "x635 y7 w35 h28", "X")
 
-MyMenu.Add("&Main", MainMenu)
-MyMenu.Add("&Keybinds", KeybindMenu)
-MyMenu.Add("&Settings", SettingsMenu)
+MinBtn.OnEvent("Click", (*) => MyGui.Minimize())
+CloseBtn.OnEvent("Click", (*) => ExitApp())
 
-; --- Create the Main GUI Window ---
-MyGui := Gui()
-MyGui.MenuBar := MyMenu
-MyGui.Title := "Human Writing Replicator"
-MyGui.SetFont("s10", "Segoe UI")
+; ==============================
+; SIDEBAR
+; ==============================
 
-; GUI Controls
+Sidebar := MyGui.Add("GroupBox", "x15 y60 w130 h340 cFFFFFF", "")
+
+MainTabBtn := MyGui.Add("Button", "x30 y95 w100 h35", "MAIN")
+MainTabBtn.OnEvent("Click", ShowMainTab)
+
+KeybindTabBtn := MyGui.Add("Button", "x30 y145 w100 h35", "KEYBINDS")
+KeybindTabBtn.OnEvent("Click", ShowKeybindTab)
+
+SettingsTabBtn := MyGui.Add("Button", "x30 y195 w100 h35", "SETTINGS")
+SettingsTabBtn.OnEvent("Click", ShowSettingsTab)
+
+; ==============================
+; MAIN TAB
+; ==============================
+
 MainControls := []
 
-txt1 := MyGui.Add("Text", "x20 y20", "Selected File:")
-MainControls.Push(txt1)
+MainTitle := MyGui.Add("Text", "x175 y60 w350 h25 cFFFFFF", "Human Writing Replicator")
+MainTitle.SetFont("s11 Bold cFFFFFF", "Segoe UI")
+MainControls.Push(MainTitle)
 
-SelectedFileBox := MyGui.Add("Edit", "x20 y45 w300 r1 ReadOnly", "No file selected.")
+FileLabel := MyGui.Add("Text", "x175 y100 cFFFFFF", "Selected File")
+MainControls.Push(FileLabel)
+
+SelectedFileBox := MyGui.Add("Edit", "x175 y125 w300 h25 ReadOnly", "No file selected.")
 MainControls.Push(SelectedFileBox)
 
-BrowseBtn := MyGui.Add("Button", "x330 y43 w80", "Browse...")
+BrowseBtn := MyGui.Add("Button", "x485 y123 w80 h30", "Browse")
 BrowseBtn.OnEvent("Click", BrowseFile)
 MainControls.Push(BrowseBtn)
 
-WriteBtn := MyGui.Add("Button", "x415 y43 w80", "Write")
+WriteBtn := MyGui.Add("Button", "x575 y123 w80 h30", "Write")
 WriteBtn.OnEvent("Click", WriteFileWithCtrlJ)
 MainControls.Push(WriteBtn)
 
-txt2 := MyGui.Add("Text", "x20 y95", "Text to Write:")
-MainControls.Push(txt2)
-
-FileContentsBox := MyGui.Add("Edit", "x20 y120 w390 r10 ReadOnly")
+FileContentsBox := MyGui.Add(
+    "Edit",
+    "x175 y175 w480 h150 ReadOnly VScroll -HScroll Wrap cFFFFFF Background303030"
+)
 MainControls.Push(FileContentsBox)
 
-TextStats := MyGui.Add(
-    "Text",
-    "x420 y120 w120 h80",
-    "Characters: 0`nWords: 0`nParagraphs: 0"
-)
+TextStats := MyGui.Add("Text", "x175 y340 w250 h70 cFFFFFF", "Characters: 0`nWords: 0`nParagraphs: 0")
 MainControls.Push(TextStats)
+
+; ==============================
+; KEYBINDS TAB
+; ==============================
 
 KeybindControls := []
 
-KeybindControls.Push(
-    MyGui.Add("Text",
-        "x20 y20 Hidden",
-        "Available Keybinds")
-)
+KeyTitle := MyGui.Add("Text", "x175 y65 w350 h30 Hidden cFFFFFF", "Keyboard Controls")
+KeyTitle.SetFont("s12 Bold cFFFFFF", "Segoe UI")
+KeybindControls.Push(KeyTitle)
 
-KeybindControls.Push(
-    MyGui.Add("Text",
-        "x20 y60 Hidden",
-        "Esc - Stop typing completely`n`n"
-      . "P - Pause/Resume typing`n`n")
-)
+Keys := MyGui.Add("Text", "x175 y115 w400 Hidden cFFFFFF", "ESC  - Stop typing completely`n`nP  - Pause / Resume typing")
+KeybindControls.Push(Keys)
+
+; ==============================
+; SETTINGS TAB
+; ==============================
 
 SettingsControls := []
 
-SpeedLabel := MyGui.Add(
-    "Text",
-    "x20 y20 w250 Hidden",
-    "Typing Speed: " . TypingSpeed . " (Lower = Faster)"
-)
+SpeedLabel := MyGui.Add("Text", "x175 y70 w300 Hidden cFFFFFF", "Typing Speed: " . TypingSpeed . " (Lower = Faster)")
 SettingsControls.Push(SpeedLabel)
 
-SpeedSlider := MyGui.Add(
-    "Slider",
-    "x20 y45 w250 Range10-100 ToolTip Hidden",
-    TypingSpeed
-)
+SpeedSlider := MyGui.Add("Slider", "x175 y100 w300 Range10-100 Hidden", TypingSpeed)
 SpeedSlider.OnEvent("Change", UpdateSpeed)
 SettingsControls.Push(SpeedSlider)
 
-
-TypoLabel := MyGui.Add(
-    "Text",
-    "x20 y90 w150 Hidden",
-    "Typo Chance: " . TypoChance . "%"
-)
+TypoLabel := MyGui.Add("Text", "x175 y155 w300 Hidden cFFFFFF", "Typo Chance: " . TypoChance . "%")
 SettingsControls.Push(TypoLabel)
 
-TypoSlider := MyGui.Add(
-    "Slider",
-    "x20 y115 w250 Range0-20 ToolTip Hidden",
-    TypoChance
-)
+TypoSlider := MyGui.Add("Slider", "x175 y185 w300 Range0-20 Hidden", TypoChance)
 TypoSlider.OnEvent("Change", UpdateTypoChance)
 SettingsControls.Push(TypoSlider)
 
+; Start live slider updates
+SetTimer(LiveSliderUpdate, 50)
 
-ProgressCheck := MyGui.Add(
-    "CheckBox",
-    "x20 y190 Hidden",
-    "Enable Progress Bar"
-)
+ProgressCheck := MyGui.Add("CheckBox", "x175 y240 Hidden cFFFFFF", "Enable Progress Bar")
 ProgressCheck.Value := UseProgressBar
 ProgressCheck.OnEvent("Click", ToggleProgress)
 SettingsControls.Push(ProgressCheck)
+
+EvilModeCheck := MyGui.Add("CheckBox", "x175 y275 Hidden cFFFFFF", "Enable Evil Mode")
+EvilModeCheck.Value := EvilMode
+EvilModeCheck.OnEvent("Click", ToggleEvilMode)
+SettingsControls.Push(EvilModeCheck)
+
+WarmupCheck := MyGui.Add("CheckBox", "x175 y310 Hidden cFFFFFF", "Enable Warmup Typing")
+WarmupCheck.Value := UseWarmup
+WarmupCheck.OnEvent("Click", ToggleWarmup)
+SettingsControls.Push(WarmupCheck)
 
 SplashGui := Gui("+AlwaysOnTop -Caption +Border")
 SplashGui.Color := "White"
@@ -188,10 +201,11 @@ ProgressGui.Hide()
 ShowMainGui(*) {
     global SplashGui, MyGui
 
-    SoundPlay("*-1") ; stops currently playing sound
-
+    SoundPlay("*-1")
     SplashGui.Destroy()
-    MyGui.Show("w520 h300 Center")
+
+    ShowMainTab()
+    MyGui.Show("w680 h420 Center")
 }
 
 ; Function to browse for a text file
@@ -248,13 +262,12 @@ WriteFileWithCtrlJ(*) {
 	}
 
 	CountdownGui.Destroy()
-	
-    SetKeyDelay(350, 350)
 
     len := StrLen(FileContents)
 	i := 1
 	
 	StartTime := A_TickCount
+	WarmupActive := true
 	
 	; Calculate estimated typing time
 	EstimatedTime := (len * TypingSpeed) / 1000
@@ -271,6 +284,26 @@ WriteFileWithCtrlJ(*) {
             Sleep(50)
 		
 		char := SubStr(FileContents, i, 1)
+		
+		; Evil Mode
+		if (EvilMode && Random(1, 100) <= 1) {
+			Mistakes := [
+				"bbc",
+				"nigger",
+			]
+
+			Mistake := Mistakes[Random(1, Mistakes.Length)]
+
+			SendText(Mistake)
+			Sleep(Random(50, 150))
+
+			Loop StrLen(Mistake) {
+				Send("{Backspace}")
+				Sleep(Random(20, 50))
+			}
+
+    Sleep(Random(50, 120))
+}
 
 		if (char = "`r")
 		{
@@ -291,14 +324,62 @@ WriteFileWithCtrlJ(*) {
 
             SendText(char)
         } else {
-            SendText(char)
-        }
+			SendText(char)
 
-        Sleep(Random(TypingSpeed - 15, TypingSpeed + 15))
+			; Occasional double space mistake
+			if (UseDoubleSpace && char = " " && Random(1,300) = 1) {
+				SendText(" ")
+				Sleep(Random(50,100))
+			}
+		}
+
+        ; Character-based typing speed variation
+		Delay := Random(TypingSpeed - 15, TypingSpeed + 15)
+
+		if (char = "." || char = "!" || char = "?") {
+			; Pause after sentence endings
+			Delay += Random(300, 650)
+		}
+		else if (char = "," || char = ";" || char = ":") {
+			; Small pause for commas and similar punctuation
+			Delay += Random(100, 300)
+		}
+		else if (char = " ") {
+			; Slight pause between words
+			Delay += Random(20, 80)
+		}
+		else if (char = "`n") {
+			; Bigger pause for new paragraphs
+			Delay += Random(400, 900)
+		}
+		else if (RegExMatch(char, "[A-Z]")) {
+			; Slight hesitation before capital letters
+			Delay += Random(50, 150)
+		}
+
+		; Faster typing on common letters
+		if (UseCommonLetterSpeed && char ~= "[etaoinshrdlu]") {
+			Delay -= Random(5, 20)
+		}
+
+		; Warmup period at the beginning
+		if (UseWarmup && WarmupActive) {
+			Delay += Random(50, 150)
+
+			if (i > 100)
+				WarmupActive := false
+		}
+
+		; Random typing rhythm changes
+		if (Random(1,100) <= 10) {
+			Delay += Random(-30,80)
+		}
+		
+		Sleep(Max(Delay, 10))
 
         ; occasional thinking pause
-        if (Random(1, 100) <= 4) {
-            Sleep(Random(200, 600))
+        if (Random(1, 100) <= 2) {
+            Sleep(Random(50, 150))
         }
 
         i++
@@ -353,36 +434,37 @@ WriteFileWithCtrlJ(*) {
 
 ; --- Tab Switching Functions ---
 
-ShowMainTab(*)
-{
+ShowMainTab(*) {
     global MainControls, KeybindControls, SettingsControls
+
+    for ctrl in MainControls
+        ctrl.Visible := true
 
     for ctrl in KeybindControls
         ctrl.Visible := false
 
     for ctrl in SettingsControls
         ctrl.Visible := false
-
-    for ctrl in MainControls
-        ctrl.Visible := true
 }
 
-ShowKeybindTab(*)
-{
+
+
+ShowKeybindTab(*) {
     global MainControls, KeybindControls, SettingsControls
 
     for ctrl in MainControls
         ctrl.Visible := false
 
-    for ctrl in SettingsControls
-        ctrl.Visible := false
-
     for ctrl in KeybindControls
         ctrl.Visible := true
+
+    for ctrl in SettingsControls
+        ctrl.Visible := false
 }
 
-ShowSettingsTab(*)
-{
+
+
+ShowSettingsTab(*) {
     global MainControls, KeybindControls, SettingsControls
 
     for ctrl in MainControls
@@ -397,32 +479,58 @@ ShowSettingsTab(*)
 
 ; --- Settings Functions ---
 
-UpdateSpeed(*)
-{
+UpdateSpeed(*) {
     global SpeedSlider, TypingSpeed, SpeedLabel
 
     TypingSpeed := SpeedSlider.Value
     SpeedLabel.Text := "Typing Speed: " . TypingSpeed . " (Lower = Faster)"
 }
 
-
-UpdateTypoChance(*)
-{
+UpdateTypoChance(*) {
     global TypoSlider, TypoChance, TypoLabel
 
     TypoChance := TypoSlider.Value
     TypoLabel.Text := "Typo Chance: " . TypoChance . "%"
 }
 
-
-ToggleProgress(*)
-{
+ToggleProgress(*) {
     global ProgressCheck, UseProgressBar
 
     UseProgressBar := ProgressCheck.Value
 }
 
+ToggleEvilMode(*) {
+    global EvilModeCheck, EvilMode
+    EvilMode := EvilModeCheck.Value
+}
+
+ToggleWarmup(*) {
+    global WarmupCheck, UseWarmup
+    UseWarmup := WarmupCheck.Value
+}
+
+DragWindow(*) {
+    DllCall("ReleaseCapture")
+    PostMessage(0xA1, 2,,, "A")
+}
+
+LiveSliderUpdate() {
+    global SpeedSlider, TypoSlider
+    global TypingSpeed, TypoChance
+    global SpeedLabel, TypoLabel
+
+    if !IsSet(SpeedSlider) || !IsSet(TypoSlider)
+        return
+
+    TypingSpeed := SpeedSlider.Value
+    TypoChance := TypoSlider.Value
+
+    SpeedLabel.Text := "Typing Speed: " . TypingSpeed . " (Lower = Faster)"
+    TypoLabel.Text := "Typo Chance: " . TypoChance . "%"
+}
+
 ; Close the app properly
+
 GuiClose(*) {
     ExitApp
 }
